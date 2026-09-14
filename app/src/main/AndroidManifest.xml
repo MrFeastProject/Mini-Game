@@ -12,7 +12,6 @@
         android:allowBackup="true"
         android:appCategory="game"
         android:isGame="true"
-        android:gameMode="on"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:hardwareAccelerated="true"
@@ -29,7 +28,28 @@
             android:name="com.samsung.android.game.gamehub"
             android:value="true" />
         <meta-data
+            android:name="com.samsung.android.game.gamehome"
+            android:value="true" />
+        <meta-data
+            android:name="com.samsung.android.game.gametools"
+            android:value="true" />
+        <meta-data
+            android:name="com.samsung.android.game.gos"
+            android:value="true" />
+        <meta-data
+            android:name="com.samsung.android.game.honeyplayplus"
+            android:value="true" />
+        <meta-data
             android:name="com.xiaomi.gamecenter.game"
+            android:value="true" />
+        <meta-data
+            android:name="com.xiaomi.gameboosterglobal"
+            android:value="true" />
+        <meta-data
+            android:name="com.miui.securitycenter"
+            android:value="true" />
+        <meta-data
+            android:name="com.xiaomi.joyose"
             android:value="true" />
 
         <activity

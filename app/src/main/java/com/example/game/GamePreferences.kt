@@ -63,25 +63,8 @@ class GamePreferences(context: Context) {
           try {
             var target = $targetFps;
             window.__cosmicFps = target;
-            if (!window.__cosmicFpsInstalled) {
-              window.__cosmicFpsInstalled = true;
-              var nativeRAF = window.requestAnimationFrame.bind(window);
-              var lastFrameTime = 0;
-              window.requestAnimationFrame = function(cb) {
-                return nativeRAF(function(time) {
-                  var currentTarget = window.__cosmicFps || 60;
-                  if (currentTarget >= 165) {
-                    return cb(time);
-                  }
-                  var minInterval = 1000 / currentTarget;
-                  if (time - lastFrameTime >= minInterval - 1.5) {
-                    lastFrameTime = time;
-                    cb(time);
-                  } else {
-                    nativeRAF(cb);
-                  }
-                });
-              };
+            if (typeof TARGET_FPS !== 'undefined') {
+              TARGET_FPS = target;
             }
           } catch(e) {}
         })();
@@ -97,6 +80,6 @@ class GamePreferences(context: Context) {
     private const val KEY_IMMERSIVE = "immersive"
 
     const val DEFAULT_FPS = 60
-    val FPS_OPTIONS = listOf(30, 60, 120, 144, 165)
+    val FPS_OPTIONS = listOf(15, 30, 60, 120, 144, 165)
   }
 }

@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.game.CosmicBattleScreen
+import com.example.game.GamePerformanceOptimizer
 import com.example.ui.theme.CosmicDark
 import com.example.ui.theme.MyApplicationTheme
 
@@ -18,6 +19,10 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
+
+    // Apply Game Mode API, PerformanceHintManager and high-performance window flags
+    GamePerformanceOptimizer.applyGameOptimizations(this)
+
     setContent {
       MyApplicationTheme {
         Surface(
@@ -30,6 +35,11 @@ class MainActivity : ComponentActivity() {
         }
       }
     }
+  }
+
+  override fun onDestroy() {
+    super.onDestroy()
+    GamePerformanceOptimizer.closeSession()
   }
 }
 

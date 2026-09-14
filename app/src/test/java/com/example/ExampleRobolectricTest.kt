@@ -25,7 +25,7 @@ class ExampleRobolectricTest {
   fun `verify fps options and preferences`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val prefs = com.example.game.GamePreferences(context)
-    assertEquals(listOf(30, 60, 120, 144, 165), com.example.game.GamePreferences.FPS_OPTIONS)
+    assertEquals(listOf(20, 30, 60, 120, 144, 165), com.example.game.GamePreferences.FPS_OPTIONS)
     prefs.fpsLimit = 120
     assertEquals(120, prefs.fpsLimit)
     prefs.fpsLimit = 165

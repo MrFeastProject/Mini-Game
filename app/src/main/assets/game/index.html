@@ -348,7 +348,7 @@
         #save-indicator { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 75px); right: 15px; font-size: 10px; color: #0ff; opacity: 0; transition: opacity 0.3s; z-index: 30; letter-spacing: 3px; pointer-events: none; text-shadow: 0 0 10px #0ff; }
         #save-indicator.show { opacity: 1; }
         
-        #fps-counter { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 75px); left: 15px; font-size: 12px; color: #0f0; z-index: 30; font-family: 'Courier New', monospace; background: rgba(0,0,0,0.7); padding: 6px 12px; border-radius: 8px; text-shadow: 0 0 10px #0f0; font-weight: bold; letter-spacing: 1px; border: 1px solid rgba(0,255,0,0.3); pointer-events: none; display: none; backdrop-filter: blur(5px); }
+        #fps-counter { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 75px); left: 15px; font-size: 13px; color: #00ff88; z-index: 30; font-family: 'Orbitron', monospace; background: rgba(3, 7, 18, 0.85); padding: 6px 14px; border-radius: 10px; text-shadow: 0 0 12px #00ff88; font-weight: 900; letter-spacing: 1.5px; border: 1px solid rgba(0,255,136,0.4); pointer-events: none; display: none; backdrop-filter: blur(8px); box-shadow: 0 4px 16px rgba(0,0,0,0.5); }
         #fps-counter.show { display: block; }
 
         ::-webkit-scrollbar { width: 6px; }
@@ -384,7 +384,7 @@
         <div class="menu-sub">MrFeastProject</div>
         <button class="menu-btn" id="btn-play" type="button"><i class="fa-solid fa-play"></i> ИГРАТЬ</button>
         <button class="menu-btn purple" id="btn-profile" type="button"><i class="fa-solid fa-user"></i> ПРОФИЛЬ</button>
-        <button class="menu-btn admin-rainbow" id="btn-admin" type="button"><i class="fa-solid fa-crown"></i> ADMIN PANEL</button>
+        <!-- Admin panel removed -->
     </div>
 </div>
 
@@ -545,20 +545,7 @@
 </div>
 
 <!-- ADMIN MODAL -->
-<div id="admin-modal" class="modal-overlay">
-    <div class="modal-window" style="border-color: rgba(255,255,255,0.3); box-shadow: 0 0 60px rgba(255,255,255,0.15);">
-        <div class="modal-content">
-            <div class="modal-header" style="color:#fff; text-shadow: 0 0 20px #fff;">ADMIN PANEL</div>
-            <div class="shop-grid">
-                <button class="menu-btn gold" id="admin-add-coins" type="button"><i class="fa-solid fa-coins"></i> +10,000 МОНЕТ</button>
-                <button class="menu-btn purple" id="admin-max-upgrades" type="button"><i class="fa-solid fa-maximize"></i> МАКС. ПРОКАЧКА</button>
-                <button class="menu-btn" id="admin-unlock-all" type="button" style="border-color:rgba(0,255,0,0.3); color:#0f0;"><i class="fa-solid fa-lock-open"></i> ОТКРЫТЬ ВСЁ</button>
-                <button class="menu-btn" id="admin-reset-save" type="button" style="border-color:rgba(255,0,85,0.3); color:#ff0055;"><i class="fa-solid fa-trash"></i> СБРОСИТЬ ПРОГРЕСС</button>
-            </div>
-            <button class="menu-btn" id="close-admin" style="margin-top:20px;" type="button"><i class="fa-solid fa-xmark"></i> ЗАКРЫТЬ</button>
-        </div>
-    </div>
-</div>
+
 
 <div id="quests-modal" class="modal-overlay">
     <div class="modal-window" style="border-color: rgba(255,215,0,0.3);">
@@ -655,7 +642,7 @@ async function loadSpriteFromDB(key) {
 const tg = null;
 const TG_USER = { first_name: 'Командир', last_name: 'Флота', username: 'cosmic_pilot', id: 5677768048 };
 const HAS_TG_API = true;
-const IS_ADMIN = true;
+const IS_ADMIN = false;
 
 // ============================================================
 // === HELPERS ===
@@ -757,7 +744,7 @@ window.skipIntroNow = function() {
 function showMenu() {
     $('main-menu').classList.add('show');
     initMenuAnimation();
-    if (IS_ADMIN) $('btn-admin').style.display = 'flex';
+    
 }
 
 // ============================================================
@@ -951,6 +938,8 @@ function loadGame() {
         if (saved) {
             const p = JSON.parse(saved);
             STATE = { ...DEFAULT_STATE, ...p };
+            STATE.isPlaying = false;
+            STATE.isPaused = false;
             STATE.upgrades = { ...DEFAULT_STATE.upgrades, ...(p.upgrades || {}) };
             STATE.unlockedAbilities = p.unlockedAbilities || ['rocketStrike'];
             STATE.equippedAbilities = p.equippedAbilities || ['rocketStrike', null];
@@ -968,6 +957,8 @@ function loadGame() {
             STATE.maxHp = 100 + STATE.upgrades.hp * 25;
         }
     } catch(e) { console.warn('Load error:', e); }
+    STATE.isPlaying = false;
+    STATE.isPaused = false;
 }
 
 function saveGame(silent) {
@@ -1207,9 +1198,11 @@ let abilityCooldowns = [0, 0];
 let freezeTimer = 0;
 let acidTimer = 0;
 let W = 0, H = 0;
-const TARGET_FPS = 60, FRAME_TIME = 1000 / TARGET_FPS;
-let lastFrameTime = 0, frameCount = 0, fpsUpdateTimer = 0;
-let currentFpsValue = 60; // Для FTAI
+let TARGET_FPS = 120, FRAME_TIME = 0; // Unlocked for high refresh rate displays (60/90/120/144/165Hz)
+let lastFrameTime = performance.now();
+let fpsFrameTimes = [];
+let lastFpsTextUpdate = 0;
+let currentFpsValue = 60;
 const fpsEl = $('fps-counter');
 
 const canvas = $('gameCanvas');
@@ -1397,7 +1390,15 @@ function startGame() {
         abilityCooldowns = [0, 0]; freezeTimer = 0; acidTimer = 0;
         waveCompleting = false;
         updateUI(); updateAbilityUI(); startWave();
-        lastFrameTime = performance.now(); fpsUpdateTimer = 0; frameCount = 0;
+        lastFrameTime = performance.now();
+        fpsFrameTimes = [];
+        lastFpsTextUpdate = 0;
+        if (fpsEl && SETTINGS.fps) {
+            fpsEl.textContent = '60 FPS';
+            fpsEl.style.color = '#00ff88';
+            fpsEl.style.textShadow = '0 0 10px #00ff88';
+            fpsEl.style.borderColor = '#00ff88';
+        }
         requestAnimationFrame(loop);
     } catch(e) { console.error('startGame error:', e); }
 }
@@ -1541,7 +1542,14 @@ function restartWave() {
     $('boss-bar-container').classList.remove('show');
     player.invuln = 90; player.weaponCooldowns = [0,0,0,0,0];
     waveCompleting = false; abilityCooldowns = [0, 0];
-    startWave(); lastFrameTime = performance.now(); requestAnimationFrame(loop);
+    startWave();
+    lastFrameTime = performance.now();
+    fpsFrameTimes = [];
+    lastFpsTextUpdate = 0;
+    if (fpsEl && SETTINGS.fps) {
+        fpsEl.textContent = '60 FPS';
+    }
+    requestAnimationFrame(loop);
 }
 function togglePause() {
     if (!STATE.isPlaying) return;
@@ -1819,19 +1827,42 @@ function draw() {
 function loop(timestamp) {
     if (!STATE.isPlaying) return;
     requestAnimationFrame(loop);
-    if (document.hidden || STATE.isPaused) { lastFrameTime = timestamp; return; }
-    const delta = timestamp - lastFrameTime;
-    if (delta < FRAME_TIME - 1) return;
-    lastFrameTime = timestamp - (delta % FRAME_TIME);
-    frameCount++; fpsUpdateTimer += delta;
-    if (fpsUpdateTimer >= 200) { 
-        const fps = Math.round(frameCount * 1000 / fpsUpdateTimer); 
-        fpsEl.textContent = `FPS: ${fps}`; 
-        currentFpsValue = fps; // Обновляем для FTAI
-        frameCount = 0; 
-        fpsUpdateTimer = 0; 
+    if (STATE.isPaused) {
+        lastFrameTime = timestamp;
+        return;
     }
-    update(delta); draw();
+    const delta = Math.min(timestamp - lastFrameTime, 100);
+    lastFrameTime = timestamp;
+
+    // High precision sliding window FPS measurement (captures true 60, 90, 120, 144+ FPS)
+    const now = performance.now();
+    fpsFrameTimes.push(now);
+    while (fpsFrameTimes.length > 0 && fpsFrameTimes[0] <= now - 1000) {
+        fpsFrameTimes.shift();
+    }
+
+    if (now - lastFpsTextUpdate >= 100) {
+        lastFpsTextUpdate = now;
+        const currentFps = fpsFrameTimes.length;
+        currentFpsValue = currentFps;
+        if (fpsEl) {
+            let color = '#00ff88';
+            if (currentFps < 30) color = '#ff3b30';
+            else if (currentFps < 55) color = '#ffcc00';
+            else if (currentFps >= 85) color = '#00e5ff';
+            fpsEl.textContent = currentFps + ' FPS';
+            fpsEl.style.color = color;
+            fpsEl.style.textShadow = '0 0 10px ' + color;
+            fpsEl.style.borderColor = color;
+        }
+    }
+
+    try {
+        update(delta);
+        draw();
+    } catch(err) {
+        console.error('Frame loop error:', err);
+    }
 }
 
 // ============================================================
@@ -1939,7 +1970,7 @@ function closeModal(id) {
     }
     if (STATE.isPlaying) {
         setTimeout(() => {
-            const anyOpen = ['upgrades-modal','shop-modal','case-modal','ability-case-modal','index-modal','quests-modal','profile-modal','pause-screen','game-over-screen','settings-modal','admin-modal','enemy-detail-modal']
+            const anyOpen = ['upgrades-modal','shop-modal','case-modal','ability-case-modal','index-modal','quests-modal','profile-modal','pause-screen','game-over-screen','settings-modal','enemy-detail-modal']
                 .some(mid => $(mid) && $(mid).classList.contains('show'));
             if (!anyOpen) resumeGameFromModal();
         }, 50);
@@ -2201,26 +2232,6 @@ function openProfile() {
 // === SETTINGS & ADMIN ===
 // ============================================================
 function openSettings() { show('settings-modal'); }
-function openAdmin() { if (!IS_ADMIN) return; show('admin-modal'); }
-
-function adminAddCoins() { STATE.coins += 10000; saveGame(); updateUI(); haptic('success'); }
-function adminMaxUpgrades() {
-    for (let k in UPGRADES) STATE.upgrades[k] = UPGRADES[k].max;
-    STATE.maxHp = 100 + STATE.upgrades.hp * 25; STATE.hp = STATE.maxHp;
-    saveGame(); updateUI(); haptic('success');
-}
-function adminUnlockAll() {
-    STATE.unlockedWeapons = Object.keys(WEAPONS);
-    STATE.unlockedAbilities = Object.keys(ABILITIES);
-    STATE.slotUnlocked = [true, true, true, true, true];
-    STATE.discoveredEnemies = Object.keys(ENEMY_TYPES);
-    saveGame(); updateUI(); haptic('success');
-}
-function adminResetSave() {
-    if (confirm('Точно сбросить весь прогресс?')) {
-        localStorage.removeItem(SAVE_KEY); location.reload();
-    }
-}
 
 // ============================================================
 // === VISIBILITY ===
@@ -2253,7 +2264,6 @@ if (tg && tg.onEvent) {
 window.addEventListener('load', () => {
     $('btn-play').addEventListener('click', () => { haptic('medium'); startGame(); });
     $('btn-profile').addEventListener('click', () => { haptic('light'); openProfile(); });
-    $('btn-admin').addEventListener('click', () => { haptic('heavy'); openAdmin(); });
 
     if (false) {
         const btn = $('btn-profile'); btn.classList.add('soon');
@@ -2278,7 +2288,6 @@ window.addEventListener('load', () => {
     $('close-profile').addEventListener('click', () => closeModal('profile-modal'));
     $('close-quests').addEventListener('click', () => closeModal('quests-modal'));
     $('close-settings').addEventListener('click', () => closeModal('settings-modal'));
-    $('close-admin').addEventListener('click', () => closeModal('admin-modal'));
     $('close-enemy-detail').addEventListener('click', () => { hide('enemy-detail-modal'); });
 
     $('tab-weapons').addEventListener('click', () => switchIndexTab('weapons'));
@@ -2296,11 +2305,6 @@ window.addEventListener('load', () => {
     $('setting-fps').addEventListener('change', (e) => { SETTINGS.fps = e.target.checked; saveSettings(); });
     $('setting-particles').addEventListener('change', (e) => { SETTINGS.particles = e.target.checked; saveSettings(); });
     $('setting-haptic').addEventListener('change', (e) => { SETTINGS.haptic = e.target.checked; saveSettings(); });
-
-    $('admin-add-coins').addEventListener('click', adminAddCoins);
-    $('admin-max-upgrades').addEventListener('click', adminMaxUpgrades);
-    $('admin-unlock-all').addEventListener('click', adminUnlockAll);
-    $('admin-reset-save').addEventListener('click', adminResetSave);
 
     document.addEventListener('click', (e) => {
         const buy = e.target.closest('[data-buy]');
