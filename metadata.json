@@ -1,0 +1,6 @@
+{
+  "name": "Cosmic Battle",
+  "description": "Cosmic Battle Android game launcher using WebView with persistent local data storage.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
