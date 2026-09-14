@@ -20,4 +20,22 @@ class ExampleRobolectricTest {
     val gameUrl = context.getString(R.string.game_url)
     assertEquals("https://mrfeastproject.github.io/Battle/", gameUrl)
   }
+
+  @Test
+  fun `verify fps options and preferences`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val prefs = com.example.game.GamePreferences(context)
+    assertEquals(listOf(30, 60, 120, 144, 165), com.example.game.GamePreferences.FPS_OPTIONS)
+    prefs.fpsLimit = 120
+    assertEquals(120, prefs.fpsLimit)
+    prefs.fpsLimit = 165
+    assertEquals(165, prefs.fpsLimit)
+  }
+
+  @Test
+  fun `verify notification channel creation`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    com.example.game.NotificationHelper.createNotificationChannel(context)
+  }
+
 }
