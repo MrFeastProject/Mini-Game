@@ -30,6 +30,13 @@ class ExampleRobolectricTest {
     assertEquals(120, prefs.fpsLimit)
     prefs.fpsLimit = 165
     assertEquals(165, prefs.fpsLimit)
+    // Minimum FPS limit is 20
+    prefs.fpsLimit = 10
+    assertEquals(20, prefs.fpsLimit)
+    prefs.fpsLimit = 15
+    assertEquals(20, prefs.fpsLimit)
+    prefs.fpsLimit = 20
+    assertEquals(20, prefs.fpsLimit)
   }
 
   @Test

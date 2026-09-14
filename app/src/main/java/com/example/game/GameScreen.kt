@@ -230,9 +230,11 @@ fun CosmicBattleScreen(
   }
 
   // Apply FPS changes dynamically
-  LaunchedEffect(currentFps) {
-    gamePreferences.fpsLimit = currentFps
-    gamePreferences.applyFpsSettings(activity, webViewInstance)
+  LaunchedEffect(currentFps, webViewInstance) {
+    if (webViewInstance != null) {
+      gamePreferences.fpsLimit = currentFps
+      gamePreferences.applyFpsSettings(activity, webViewInstance)
+    }
   }
 
   // Handle Android Back Navigation

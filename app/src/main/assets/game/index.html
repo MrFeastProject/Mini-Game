@@ -1198,8 +1198,18 @@ let abilityCooldowns = [0, 0];
 let freezeTimer = 0;
 let acidTimer = 0;
 let W = 0, H = 0;
-let TARGET_FPS = 120, FRAME_TIME = 0; // Unlocked for high refresh rate displays (60/90/120/144/165Hz)
+let TARGET_FPS = 60; // In-game FPS limit (minimum 20)
+function setGameFpsLimit(fps) {
+    TARGET_FPS = Math.max(20, Number(fps) || 60);
+}
+window.setGameFpsLimit = setGameFpsLimit;
+if (typeof window.__cosmicFps === 'number') {
+    setGameFpsLimit(window.__cosmicFps);
+}
 let lastFrameTime = performance.now();
+let lastGameRenderTime = performance.now();
+let simAccumulator = 0;
+const SIMULATION_STEP = 1000 / 60; // 60 ticks/s standard game physics
 let fpsFrameTimes = [];
 let lastFpsTextUpdate = 0;
 let currentFpsValue = 60;
@@ -1391,10 +1401,13 @@ function startGame() {
         waveCompleting = false;
         updateUI(); updateAbilityUI(); startWave();
         lastFrameTime = performance.now();
+        lastGameRenderTime = performance.now();
+        simAccumulator = 0;
         fpsFrameTimes = [];
         lastFpsTextUpdate = 0;
         if (fpsEl && SETTINGS.fps) {
-            fpsEl.textContent = '60 FPS';
+            const initialFps = Math.max(20, (typeof TARGET_FPS === 'number' && TARGET_FPS >= 20) ? TARGET_FPS : 60);
+            fpsEl.textContent = initialFps + ' FPS';
             fpsEl.style.color = '#00ff88';
             fpsEl.style.textShadow = '0 0 10px #00ff88';
             fpsEl.style.borderColor = '#00ff88';
@@ -1544,10 +1557,13 @@ function restartWave() {
     waveCompleting = false; abilityCooldowns = [0, 0];
     startWave();
     lastFrameTime = performance.now();
+    lastGameRenderTime = performance.now();
+    simAccumulator = 0;
     fpsFrameTimes = [];
     lastFpsTextUpdate = 0;
     if (fpsEl && SETTINGS.fps) {
-        fpsEl.textContent = '60 FPS';
+        const initialFps = Math.max(20, (typeof TARGET_FPS === 'number' && TARGET_FPS >= 20) ? TARGET_FPS : 60);
+        fpsEl.textContent = initialFps + ' FPS';
     }
     requestAnimationFrame(loop);
 }
@@ -1822,19 +1838,34 @@ function draw() {
 }
 
 // ============================================================
-// === LOOP (WITH FTAI FPS UPDATE) ===
+// === LOOP (WITH IN-GAME ONLY FPS LIMITER, MIN 20 FPS) ===
 // ============================================================
 function loop(timestamp) {
     if (!STATE.isPlaying) return;
     requestAnimationFrame(loop);
     if (STATE.isPaused) {
-        lastFrameTime = timestamp;
+        lastGameRenderTime = timestamp;
+        simAccumulator = 0;
         return;
     }
-    const delta = Math.min(timestamp - lastFrameTime, 100);
-    lastFrameTime = timestamp;
 
-    // High precision sliding window FPS measurement (captures true 60, 90, 120, 144+ FPS)
+    // FPS limitation is strictly restricted to in-game rendering
+    const effectiveFps = Math.max(20, (typeof TARGET_FPS === 'number' && TARGET_FPS >= 20) ? TARGET_FPS : 60);
+    const frameInterval = 1000 / effectiveFps;
+    const elapsed = timestamp - lastGameRenderTime;
+
+    if (elapsed < frameInterval - 2.0) {
+        return; // Skip rendering this frame to maintain target in-game FPS
+    }
+
+    if (elapsed > frameInterval * 2) {
+        lastGameRenderTime = timestamp;
+    } else {
+        lastGameRenderTime += frameInterval;
+    }
+    const delta = Math.min(elapsed, 150);
+
+    // High precision sliding window FPS measurement (captures true 20, 30, 60, 120, 144+ FPS)
     const now = performance.now();
     fpsFrameTimes.push(now);
     while (fpsFrameTimes.length > 0 && fpsFrameTimes[0] <= now - 1000) {
@@ -1847,7 +1878,7 @@ function loop(timestamp) {
         currentFpsValue = currentFps;
         if (fpsEl) {
             let color = '#00ff88';
-            if (currentFps < 30) color = '#ff3b30';
+            if (currentFps < 25) color = '#ff3b30';
             else if (currentFps < 55) color = '#ffcc00';
             else if (currentFps >= 85) color = '#00e5ff';
             fpsEl.textContent = currentFps + ' FPS';
@@ -1858,7 +1889,15 @@ function loop(timestamp) {
     }
 
     try {
-        update(delta);
+        // Advance simulation smoothly at constant speed regardless of in-game render FPS
+        simAccumulator += delta;
+        if (simAccumulator > 200) simAccumulator = 200;
+        let updateCount = 0;
+        while (simAccumulator >= SIMULATION_STEP && updateCount < 6) {
+            update(SIMULATION_STEP);
+            simAccumulator -= SIMULATION_STEP;
+            updateCount++;
+        }
         draw();
     } catch(err) {
         console.error('Frame loop error:', err);

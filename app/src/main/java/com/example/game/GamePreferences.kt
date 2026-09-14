@@ -13,8 +13,8 @@ class GamePreferences(context: Context) {
     context.getSharedPreferences("cosmic_battle_prefs", Context.MODE_PRIVATE)
 
   var fpsLimit: Int
-    get() = prefs.getInt(KEY_FPS_LIMIT, DEFAULT_FPS)
-    set(value) = prefs.edit().putInt(KEY_FPS_LIMIT, value).apply()
+    get() = prefs.getInt(KEY_FPS_LIMIT, DEFAULT_FPS).coerceAtLeast(MIN_FPS)
+    set(value) = prefs.edit().putInt(KEY_FPS_LIMIT, value.coerceAtLeast(MIN_FPS)).apply()
 
   var isNotificationsEnabled: Boolean
     get() = prefs.getBoolean(KEY_NOTIFICATIONS_ENABLED, true)
@@ -29,26 +29,17 @@ class GamePreferences(context: Context) {
     set(value) = prefs.edit().putBoolean(KEY_IMMERSIVE, value).apply()
 
   fun applyFpsSettings(activity: Activity?, webView: WebView?) {
-    val targetFps = fpsLimit
+    val targetFps = fpsLimit.coerceAtLeast(MIN_FPS)
 
-    // 1. Native Display Refresh Rate for Android 11+ (API 30+)
+    // IMPORTANT: FPS is limited ONLY inside the game canvas loop.
+    // The Android activity / window refresh rate is never downscaled to 20 or 30 Hz,
+    // so Compose UI, drawers, and system navigation remain fluid at the device's native refresh rate.
+    // Only high refresh rate modes (e.g. 120Hz+) are unlocked if requested.
     activity?.let { act ->
       try {
-        val window = act.window
-        val layoutParams = window.attributes
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-          layoutParams.preferredRefreshRate = targetFps.toFloat()
-          window.attributes = layoutParams
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-          // On Android 6.0 - 10.0, select compatible display mode if available
-          val display = window.windowManager.defaultDisplay
-          val modes = display.supportedModes
-          val bestMode = modes.firstOrNull { mode ->
-            Math.abs(mode.refreshRate - targetFps) < 1.0f
-          }
-          if (bestMode != null) {
-            layoutParams.preferredDisplayModeId = bestMode.modeId
-            window.attributes = layoutParams
+          act.window.attributes = act.window.attributes.apply {
+            preferredRefreshRate = if (targetFps > 60) targetFps.toFloat() else 0f
           }
         }
       } catch (_: Exception) {
@@ -56,20 +47,24 @@ class GamePreferences(context: Context) {
       }
     }
 
-    // 2. Safe non-blocking JavaScript FPS update (never wraps recursively)
+    // Pass the FPS limit to the game running in the WebView
     webView?.let { wv ->
       val js = """
         (function() {
           try {
             var target = $targetFps;
             window.__cosmicFps = target;
-            if (typeof TARGET_FPS !== 'undefined') {
+            if (typeof setGameFpsLimit === 'function') {
+              setGameFpsLimit(target);
+            } else if (typeof TARGET_FPS !== 'undefined') {
               TARGET_FPS = target;
             }
           } catch(e) {}
         })();
       """.trimIndent()
-      wv.evaluateJavascript(js, null)
+      wv.post {
+        wv.evaluateJavascript(js, null)
+      }
     }
   }
 
@@ -79,7 +74,8 @@ class GamePreferences(context: Context) {
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
     private const val KEY_IMMERSIVE = "immersive"
 
+    const val MIN_FPS = 20
     const val DEFAULT_FPS = 60
-    val FPS_OPTIONS = listOf(15, 30, 60, 120, 144, 165)
+    val FPS_OPTIONS = listOf(20, 30, 60, 120, 144, 165)
   }
 }
