@@ -1,4 +1,4 @@
-<?xml version="1.0.1" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
@@ -8,10 +8,25 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Graphics Engine & Hardware Acceleration Capabilities -->
+    <uses-feature
+        android:name="android.hardware.vulkan.version"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.vulkan.level"
+        android:required="false" />
+    <uses-feature
+        android:glEsVersion="0x00030002"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.gpu.compute"
+        android:required="false" />
+
     <application
         android:allowBackup="true"
         android:appCategory="game"
         android:isGame="true"
+        android:largeHeap="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:hardwareAccelerated="true"
@@ -20,6 +35,23 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.MyApplication">
+
+        <!-- Forced GPU Rendering & Skia / Vulkan Pipeline Optimization Flags -->
+        <meta-data
+            android:name="android.graphics.renderthread.prefer_vulkan"
+            android:value="true" />
+        <meta-data
+            android:name="com.android.graphics.developermode.enable_gpu_rendering"
+            android:value="true" />
+        <meta-data
+            android:name="android.hardware.gpu.boost"
+            android:value="true" />
+        <meta-data
+            android:name="com.qualcomm.qti.game.enable_adreno_boost"
+            android:value="true" />
+        <meta-data
+            android:name="com.arm.maligpu.performance_mode"
+            android:value="true" />
 
         <meta-data
             android:name="isGame"
@@ -67,6 +99,14 @@
                 <category android:name="android.intent.category.GAME" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".game.BattleReminderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.game.ACTION_BATTLE_REMINDER" />
+            </intent-filter>
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"

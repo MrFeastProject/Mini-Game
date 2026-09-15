@@ -17,7 +17,34 @@ import com.example.R
 
 object NotificationHelper {
   const val CHANNEL_ID = "cosmic_battle_channel"
+  const val ACTION_BATTLE_REMINDER = "com.example.game.ACTION_BATTLE_REMINDER"
   private const val NOTIFICATION_ID = 1001
+  private const val REMINDER_NOTIFICATION_ID = 2002
+  private const val REMINDER_REQUEST_CODE = 3003
+
+  // Default reminder delay: 3 hours of inactivity (in ms)
+  // For immediate background testing or long idle periods
+  const val DEFAULT_REMINDER_DELAY_MS = 3 * 60 * 60 * 1000L
+  const val NEXT_REMINDER_DELAY_MS = 6 * 60 * 60 * 1000L
+
+  private val BATTLE_REMINDER_MESSAGES = listOf(
+    Pair(
+      "Командир, враги наступают! 🚀",
+      "Вы давно не играли! Космические захватчики атакуют галактику — пора идти побеждать врагов!"
+    ),
+    Pair(
+      "Тревога в звездном секторе! ⚔️",
+      "Вы давно не выходили на связь! Армада пришельцев наступает — возвращайтесь и уничтожайте врагов!"
+    ),
+    Pair(
+      "Ваш истребитель ждет вас! 🌌",
+      "Корабли противника перегруппировались! Пора подниматься на орбиту и сокрушать космических боссов!"
+    ),
+    Pair(
+      "Галактический призыв! 💥",
+      "Враги захватывают новые секторы. Возвращайтесь в бой и покажите мощь своего флота!"
+    )
+  )
 
   fun createNotificationChannel(context: Context) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -88,5 +115,119 @@ object NotificationHelper {
     } catch (_: SecurityException) {
       return false
     }
+  }
+
+  fun scheduleBackgroundBattleReminders(
+    context: Context,
+    delayMillis: Long = DEFAULT_REMINDER_DELAY_MS
+  ) {
+    try {
+      val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager ?: return
+      val intent = Intent(context, BattleReminderReceiver::class.java).apply {
+        action = ACTION_BATTLE_REMINDER
+      }
+      val pendingIntent = PendingIntent.getBroadcast(
+        context,
+        REMINDER_REQUEST_CODE,
+        intent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+      )
+
+      val triggerAtMillis = System.currentTimeMillis() + delayMillis
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        alarmManager.setAndAllowWhileIdle(
+          android.app.AlarmManager.RTC_WAKEUP,
+          triggerAtMillis,
+          pendingIntent
+        )
+      } else {
+        alarmManager.set(
+          android.app.AlarmManager.RTC_WAKEUP,
+          triggerAtMillis,
+          pendingIntent
+        )
+      }
+    } catch (e: Exception) {
+      android.util.Log.w("NotificationHelper", "Failed to schedule battle reminder: ${e.message}")
+    }
+  }
+
+  fun cancelBackgroundBattleReminders(context: Context) {
+    try {
+      val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager
+      if (alarmManager != null) {
+        val intent = Intent(context, BattleReminderReceiver::class.java).apply {
+          action = ACTION_BATTLE_REMINDER
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+          context,
+          REMINDER_REQUEST_CODE,
+          intent,
+          PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        )
+        if (pendingIntent != null) {
+          alarmManager.cancel(pendingIntent)
+          pendingIntent.cancel()
+        }
+      }
+
+      val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+      notificationManager?.cancel(REMINDER_NOTIFICATION_ID)
+    } catch (e: Exception) {
+      android.util.Log.w("NotificationHelper", "Failed to cancel battle reminders: ${e.message}")
+    }
+  }
+
+  fun triggerBackgroundBattleNotification(context: Context) {
+    createNotificationChannel(context)
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      if (ActivityCompat.checkSelfPermission(
+          context,
+          Manifest.permission.POST_NOTIFICATIONS
+        ) != PackageManager.PERMISSION_GRANTED
+      ) {
+        return
+      }
+    }
+
+    val (title, body) = BATTLE_REMINDER_MESSAGES.random()
+
+    val intent = Intent(context, MainActivity::class.java).apply {
+      flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+    }
+    val pendingIntent = PendingIntent.getActivity(
+      context,
+      REMINDER_REQUEST_CODE,
+      intent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    val largeIcon = try {
+      BitmapFactory.decodeResource(context.resources, R.drawable.img_cosmic_icon)
+    } catch (_: Exception) {
+      null
+    }
+
+    val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+      .setSmallIcon(R.mipmap.ic_launcher)
+      .setContentTitle(title)
+      .setContentText(body)
+      .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+      .setPriority(NotificationCompat.PRIORITY_HIGH)
+      .setCategory(NotificationCompat.CATEGORY_REMINDER)
+      .setContentIntent(pendingIntent)
+      .setAutoCancel(true)
+
+    if (largeIcon != null) {
+      builder.setLargeIcon(largeIcon)
+    }
+
+    try {
+      with(NotificationManagerCompat.from(context)) {
+        notify(REMINDER_NOTIFICATION_ID, builder.build())
+      }
+      scheduleBackgroundBattleReminders(context, NEXT_REMINDER_DELAY_MS)
+    } catch (_: SecurityException) {}
   }
 }

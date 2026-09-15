@@ -45,4 +45,23 @@ class ExampleRobolectricTest {
     com.example.game.NotificationHelper.createNotificationChannel(context)
   }
 
+  @Test
+  fun `verify graphics engine detector`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val engineInfo = com.example.game.GraphicsEngineDetector.getGraphicsEngineInfo(context)
+    org.junit.Assert.assertNotNull(engineInfo.bestEngineName)
+    org.junit.Assert.assertTrue(engineInfo.isHardwareAccelerated)
+    val bridge = com.example.game.AndroidBridge(context)
+    assertEquals("1.0.2", bridge.getAppVersion())
+    org.junit.Assert.assertTrue(bridge.getGraphicsEngineInfoJson().contains("1.0.2"))
+  }
+
+  @Test
+  fun `verify background battle reminders lifecycle`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    com.example.game.NotificationHelper.scheduleBackgroundBattleReminders(context, 1000L)
+    com.example.game.NotificationHelper.cancelBackgroundBattleReminders(context)
+    val receiver = com.example.game.BattleReminderReceiver()
+    org.junit.Assert.assertNotNull(receiver)
+  }
 }

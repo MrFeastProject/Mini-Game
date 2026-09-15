@@ -1,6 +1,6 @@
 {
   "name": "Cosmic Battle",
-  "description": "Cosmic Battle Android game launcher using WebView with persistent local data storage.",
+  "description": "Cosmic Battle v1.0.2 Android game with active graphics engine detection (Vulkan / OpenGL ES 3.2), maximum CPU/GPU/WebView hardware optimization, and background battle reminders.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

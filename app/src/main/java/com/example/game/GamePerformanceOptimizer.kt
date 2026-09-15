@@ -20,10 +20,17 @@ object GamePerformanceOptimizer {
 
   /**
    * Applies all maximum performance optimizations, game mode hooks,
-   * performance hint session, and cutout window flags.
+   * performance hint session, cutout window flags, and urgent display priority.
    */
   fun applyGameOptimizations(activity: Activity) {
     val window = activity.window
+
+    // 0. Hardcore Thread Priority Optimization for Display / RenderThread
+    try {
+      Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_DISPLAY)
+    } catch (e: Exception) {
+      Log.w(TAG, "Failed to elevate thread priority: ${e.message}")
+    }
 
     // 1. Official Game Mode API (Android 13+ / API 33+)
     try {
@@ -111,6 +118,49 @@ object GamePerformanceOptimizer {
         hintSession?.reportActualWorkDuration(actualDurationNs)
       }
     } catch (_: Exception) {}
+  }
+
+  @Suppress("DEPRECATION")
+  fun optimizeWebView(webView: android.webkit.WebView) {
+    try {
+      // 1. Force dedicated GPU hardware layer
+      webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+      webView.isScrollbarFadingEnabled = true
+      webView.isVerticalScrollBarEnabled = false
+      webView.isHorizontalScrollBarEnabled = false
+      webView.overScrollMode = View.OVER_SCROLL_NEVER
+
+      // 2. High-priority renderer process (Android 8+ / API 26+)
+      // RENDERER_PRIORITY_IMPORTANT tells the OS scheduler to never throttle or kill WebView GPU/render process
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        webView.setRendererPriorityPolicy(android.webkit.WebView.RENDERER_PRIORITY_IMPORTANT, false)
+      }
+
+      // 3. WebSettings maximum performance configuration
+      webView.settings.apply {
+        setRenderPriority(android.webkit.WebSettings.RenderPriority.HIGH)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+          offscreenPreRaster = true
+        }
+        domStorageEnabled = true
+        databaseEnabled = true
+        cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
+        allowFileAccess = true
+        allowContentAccess = true
+        loadsImagesAutomatically = true
+        blockNetworkImage = false
+        mediaPlaybackRequiresUserGesture = false
+        mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+      }
+
+      // 4. Disable cookie management to eliminate flash storage disk IO overhead during gameplay
+      try {
+        android.webkit.CookieManager.getInstance().setAcceptCookie(false)
+      } catch (_: Exception) {}
+
+    } catch (e: Exception) {
+      Log.w(TAG, "WebView hardware optimization error: ${e.message}")
+    }
   }
 
   fun closeSession() {

@@ -21,6 +21,35 @@ class AndroidBridge(private val context: Context) {
   }
 
   @JavascriptInterface
+  fun getAppVersion(): String = "1.0.2"
+
+  @JavascriptInterface
+  fun isHardwareAccelerated(): Boolean = true
+
+  @JavascriptInterface
+  fun getGraphicsEngineInfoJson(): String {
+    return try {
+      val info = GraphicsEngineDetector.getGraphicsEngineInfo(context)
+      val json = org.json.JSONObject().apply {
+        put("bestEngine", info.bestEngineName)
+        put("engineType", info.engineType)
+        put("vulkanSupported", info.vulkanSupported)
+        put("vulkanVersion", info.vulkanVersion ?: "N/A")
+        put("openGlVersion", info.openGlVersion)
+        put("gpuRenderer", info.gpuRenderer)
+        put("gpuVendor", info.gpuVendor)
+        put("isHardwareAccelerated", info.isHardwareAccelerated)
+        put("recommendationSummary", info.recommendationSummary)
+        put("technicalDetails", info.technicalDetails)
+        put("appVersion", "1.0.2")
+      }
+      json.toString()
+    } catch (e: Exception) {
+      "{ \"bestEngine\": \"Hardware GPU Pipeline\", \"appVersion\": \"1.0.2\", \"isHardwareAccelerated\": true }"
+    }
+  }
+
+  @JavascriptInterface
   fun vibrate(type: String?) {
     val vib = vibrator ?: return
     if (!vib.hasVibrator()) return

@@ -72,6 +72,8 @@ import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -116,6 +118,7 @@ import com.example.ui.theme.AlertRed
 import com.example.ui.theme.CosmicDark
 import com.example.ui.theme.CosmicSurface
 import com.example.ui.theme.CosmicSurfaceVariant
+import com.example.ui.theme.GlowGreen
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.NeonPurple
 import com.example.ui.theme.StarSilver
@@ -292,6 +295,7 @@ fun CosmicBattleScreen(
             // Cosmic dark background: NEVER flashes white on render/redraw
             setBackgroundColor(android.graphics.Color.parseColor("#030308"))
             setLayerType(View.LAYER_TYPE_HARDWARE, null)
+            GamePerformanceOptimizer.optimizeWebView(this)
             isFocusable = true
             isFocusableInTouchMode = true
             requestFocus()
@@ -1008,6 +1012,7 @@ private fun CosmicSettingsDialog(
   onDismiss: () -> Unit
 ) {
   val context = LocalContext.current
+  val graphicsInfo = remember { GraphicsEngineDetector.getGraphicsEngineInfo(context) }
 
   AlertDialog(
     onDismissRequest = onDismiss,
@@ -1020,12 +1025,20 @@ private fun CosmicSettingsDialog(
           modifier = Modifier.size(24.dp)
         )
         Spacer(modifier = Modifier.width(10.dp))
-        Text(
-          text = "Настройки Cosmic Battle",
-          color = StarWhite,
-          fontWeight = FontWeight.Bold,
-          fontSize = 18.sp
-        )
+        Column {
+          Text(
+            text = "Настройки Cosmic Battle",
+            color = StarWhite,
+            fontWeight = FontWeight.Bold,
+            fontSize = 17.sp
+          )
+          Text(
+            text = "Версия 1.0.2",
+            color = StarSilver,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Normal
+          )
+        }
       }
     },
     text = {
@@ -1035,6 +1048,66 @@ private fun CosmicSettingsDialog(
           .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(14.dp)
       ) {
+        // --- Section: Active Graphics Engine Display Only ---
+        Card(
+          shape = RoundedCornerShape(12.dp),
+          colors = CardDefaults.cardColors(
+            containerColor = CosmicSurfaceVariant.copy(alpha = 0.85f)
+          ),
+          border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            NeonCyan.copy(alpha = 0.4f)
+          ),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              modifier = Modifier.weight(1f, fill = false)
+            ) {
+              Icon(
+                imageVector = Icons.Default.RocketLaunch,
+                contentDescription = null,
+                tint = NeonCyan,
+                modifier = Modifier.size(20.dp)
+              )
+              Spacer(modifier = Modifier.width(10.dp))
+              Column {
+                Text(
+                  text = "Активированный движок",
+                  color = StarSilver,
+                  fontSize = 11.sp
+                )
+                Text(
+                  text = graphicsInfo.bestEngineName,
+                  color = GlowGreen,
+                  fontWeight = FontWeight.Bold,
+                  fontSize = 13.sp
+                )
+              }
+            }
+            Surface(
+              shape = RoundedCornerShape(10.dp),
+              color = NeonCyan.copy(alpha = 0.15f),
+              border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.35f))
+            ) {
+              Text(
+                text = graphicsInfo.engineType,
+                color = NeonCyan,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+              )
+            }
+          }
+        }
+
         // --- Section: FPS Limit ---
         Column {
           Row(

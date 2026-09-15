@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.game.CosmicBattleScreen
 import com.example.game.GamePerformanceOptimizer
+import com.example.game.NotificationHelper
 import com.example.ui.theme.CosmicDark
 import com.example.ui.theme.MyApplicationTheme
 
@@ -35,6 +36,24 @@ class MainActivity : ComponentActivity() {
         }
       }
     }
+  }
+
+  override fun onStart() {
+    super.onStart()
+    // Cancel background battle reminder notifications while player is active
+    NotificationHelper.cancelBackgroundBattleReminders(this)
+  }
+
+  override fun onResume() {
+    super.onResume()
+    NotificationHelper.cancelBackgroundBattleReminders(this)
+    GamePerformanceOptimizer.applyGameOptimizations(this)
+  }
+
+  override fun onStop() {
+    super.onStop()
+    // When the app goes to background, schedule reminders that user hasn't played for a while
+    NotificationHelper.scheduleBackgroundBattleReminders(this)
   }
 
   override fun onDestroy() {
