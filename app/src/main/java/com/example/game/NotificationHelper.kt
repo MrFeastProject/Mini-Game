@@ -21,6 +21,8 @@ object NotificationHelper {
   private const val NOTIFICATION_ID = 1001
   private const val REMINDER_NOTIFICATION_ID = 2002
   private const val REMINDER_REQUEST_CODE = 3003
+  private const val UPDATE_NOTIFICATION_ID = 4004
+  private const val UPDATE_REQUEST_CODE = 4005
 
   // Default reminder delay: 3 hours of inactivity (in ms)
   // For immediate background testing or long idle periods
@@ -115,6 +117,93 @@ object NotificationHelper {
     } catch (_: SecurityException) {
       return false
     }
+  }
+
+  fun sendUpdateProgressNotification(
+    context: Context,
+    version: String,
+    percent: Int
+  ) {
+    createNotificationChannel(context)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      if (ActivityCompat.checkSelfPermission(
+          context,
+          Manifest.permission.POST_NOTIFICATIONS
+        ) != PackageManager.PERMISSION_GRANTED
+      ) {
+        return
+      }
+    }
+
+    val intent = Intent(context, MainActivity::class.java).apply {
+      flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+    }
+    val pendingIntent = PendingIntent.getActivity(
+      context,
+      UPDATE_REQUEST_CODE,
+      intent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+      .setSmallIcon(R.mipmap.ic_launcher)
+      .setContentTitle("Загрузка обновления Cosmic Battle v$version")
+      .setContentText("Скачивание в фоне: $percent%")
+      .setProgress(100, percent, false)
+      .setOngoing(percent < 100)
+      .setPriority(NotificationCompat.PRIORITY_LOW)
+      .setContentIntent(pendingIntent)
+      .setAutoCancel(false)
+
+    try {
+      with(NotificationManagerCompat.from(context)) {
+        notify(UPDATE_NOTIFICATION_ID, builder.build())
+      }
+    } catch (_: SecurityException) {}
+  }
+
+  fun sendUpdateReadyNotification(
+    context: Context,
+    version: String,
+    apkFile: java.io.File
+  ) {
+    createNotificationChannel(context)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      if (ActivityCompat.checkSelfPermission(
+          context,
+          Manifest.permission.POST_NOTIFICATIONS
+        ) != PackageManager.PERMISSION_GRANTED
+      ) {
+        return
+      }
+    }
+
+    val installIntent = AppUpdateManager.getInstallIntent(context, apkFile)
+      ?: Intent(context, MainActivity::class.java).apply {
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+      }
+
+    val pendingIntent = PendingIntent.getActivity(
+      context,
+      UPDATE_REQUEST_CODE,
+      installIntent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+      .setSmallIcon(R.mipmap.ic_launcher)
+      .setContentTitle("🚀 Обновление Cosmic Battle v$version готово!")
+      .setContentText("Новая версия загружена в фоне. Нажмите для установки!")
+      .setStyle(NotificationCompat.BigTextStyle().bigText("Новая версия v$version загружена. Нажмите для быстрой установки."))
+      .setPriority(NotificationCompat.PRIORITY_HIGH)
+      .setContentIntent(pendingIntent)
+      .setAutoCancel(true)
+
+    try {
+      with(NotificationManagerCompat.from(context)) {
+        notify(UPDATE_NOTIFICATION_ID, builder.build())
+      }
+    } catch (_: SecurityException) {}
   }
 
   fun scheduleBackgroundBattleReminders(

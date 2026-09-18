@@ -21,7 +21,7 @@ class AndroidBridge(private val context: Context) {
   }
 
   @JavascriptInterface
-  fun getAppVersion(): String = "1.0.3"
+  fun getAppVersion(): String = CURRENT_VERSION
 
   @JavascriptInterface
   fun isHardwareAccelerated(): Boolean = true
@@ -41,11 +41,11 @@ class AndroidBridge(private val context: Context) {
         put("isHardwareAccelerated", info.isHardwareAccelerated)
         put("recommendationSummary", info.recommendationSummary)
         put("technicalDetails", info.technicalDetails)
-        put("appVersion", "1.0.3")
+        put("appVersion", CURRENT_VERSION)
       }
       json.toString()
     } catch (e: Exception) {
-      "{ \"bestEngine\": \"Hardware GPU Pipeline\", \"appVersion\": \"1.0.3\", \"isHardwareAccelerated\": true }"
+      "{ \"bestEngine\": \"Hardware GPU Pipeline\", \"appVersion\": \"$CURRENT_VERSION\", \"isHardwareAccelerated\": true }"
     }
   }
 
@@ -85,5 +85,9 @@ class AndroidBridge(private val context: Context) {
         vib.vibrate(duration)
       }
     } catch (_: Exception) {}
+  }
+
+  companion object {
+    const val CURRENT_VERSION = "1.0.4"
   }
 }

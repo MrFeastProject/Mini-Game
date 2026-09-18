@@ -19,7 +19,7 @@ import java.net.URL
 
 object AppUpdateManager {
   private const val TAG = "AppUpdateManager"
-  const val DEFAULT_REPO = "MrFeastProject/CosmicBattle"
+  const val DEFAULT_REPO = "MrFeastProject/Mini-Game"
 
   data class UpdateInfo(
     val latestVersion: String,
@@ -48,16 +48,36 @@ object AppUpdateManager {
   }
 
   /**
-   * Compares two semantic version strings (e.g. "1.0.4" vs "1.0.3").
+   * Splits a version string into numerical parts (e.g. "1.0.3.1" -> [1, 0, 3, 1]).
+   * Supports prefixes like "v", "V", "release-", and separators like dots, hyphens, and underscores.
+   */
+  fun parseVersionSegments(versionStr: String): List<Int> {
+    if (versionStr.isBlank()) return emptyList()
+    val clean = versionStr.trim()
+      .replace(Regex("(?i)^[a-z_\\-]+"), "") // strip "v", "ver", "release-"
+      .replace(Regex("[^0-9.]+"), ".") // normalize delimiters to dots
+    return clean.split(".")
+      .filter { it.isNotBlank() }
+      .mapNotNull { it.toIntOrNull() }
+  }
+
+  /**
+   * Compares two semantic version strings (e.g. "1.0.4" vs "1.0.3", "1.0.3.1" vs "1.0.3").
    * Returns true if remoteVersion is strictly newer than currentVersion.
+   * For example:
+   *  - 1.0.3.1 is newer than 1.0.3 -> true
+   *  - 1.0.3.2 is newer than 1.0.3.1 -> true
+   *  - 1.0.4 is newer than 1.0.3.1 -> true
+   *  - 1.0.3 is newer than 1.0.3 -> false
    */
   fun isNewerVersion(remoteVersion: String, currentVersion: String): Boolean {
     try {
-      val remoteClean = remoteVersion.trim().removePrefix("v").removePrefix("V")
-      val currentClean = currentVersion.trim().removePrefix("v").removePrefix("V")
+      val remoteParts = parseVersionSegments(remoteVersion)
+      val currentParts = parseVersionSegments(currentVersion)
 
-      val remoteParts = remoteClean.split(".").map { it.filter { char -> char.isDigit() }.toIntOrNull() ?: 0 }
-      val currentParts = currentClean.split(".").map { it.filter { char -> char.isDigit() }.toIntOrNull() ?: 0 }
+      if (remoteParts.isEmpty() || currentParts.isEmpty()) {
+        return false
+      }
 
       val maxLen = maxOf(remoteParts.size, currentParts.size)
       for (i in 0 until maxLen) {
@@ -288,11 +308,33 @@ object AppUpdateManager {
   }
 
   /**
+   * Generates an Intent to install the downloaded APK via FileProvider.
+   */
+  fun getInstallIntent(context: Context, apkFile: File): Intent? {
+    if (!apkFile.exists() || apkFile.length() == 0L) return null
+    return try {
+      val apkUri = FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        apkFile
+      )
+      Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(apkUri, "application/vnd.android.package-archive")
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to create install intent: ${e.message}", e)
+      null
+    }
+  }
+
+  /**
    * Installs the downloaded APK using Android PackageInstaller via FileProvider.
    * If permission to install unknown apps is missing on Android 8+, prompts settings.
    */
   fun installApk(context: Context, apkFile: File): Boolean {
-    if (!apkFile.exists() || apkFile.length() == 0L) {
+    val installIntent = getInstallIntent(context, apkFile) ?: run {
       Log.e(TAG, "Cannot install: APK file does not exist or is empty.")
       return false
     }
@@ -306,20 +348,7 @@ object AppUpdateManager {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
           }
           context.startActivity(settingsIntent)
-          // We also still proceed to show the install intent
         }
-      }
-
-      val apkUri = FileProvider.getUriForFile(
-        context,
-        "${context.packageName}.fileprovider",
-        apkFile
-      )
-
-      val installIntent = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(apkUri, "application/vnd.android.package-archive")
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
       }
 
       context.startActivity(installIntent)

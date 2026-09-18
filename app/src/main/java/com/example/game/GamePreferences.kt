@@ -28,8 +28,18 @@ class GamePreferences(context: Context) {
     get() = prefs.getBoolean(KEY_IMMERSIVE, true)
     set(value) = prefs.edit().putBoolean(KEY_IMMERSIVE, value).apply()
 
+  var isAutoUpdateEnabled: Boolean
+    get() = prefs.getBoolean(KEY_AUTO_UPDATE_ENABLED, true)
+    set(value) = prefs.edit().putBoolean(KEY_AUTO_UPDATE_ENABLED, value).apply()
+
   var githubRepo: String
-    get() = prefs.getString(KEY_GITHUB_REPO, AppUpdateManager.DEFAULT_REPO) ?: AppUpdateManager.DEFAULT_REPO
+    get() {
+      val saved = prefs.getString(KEY_GITHUB_REPO, null)
+      if (saved.isNullOrBlank() || saved.contains("CosmicBattle", ignoreCase = true) || saved.contains("/Battle", ignoreCase = true)) {
+        return AppUpdateManager.DEFAULT_REPO
+      }
+      return saved
+    }
     set(value) = prefs.edit().putString(KEY_GITHUB_REPO, value.trim()).apply()
 
   fun applyFpsSettings(activity: Activity?, webView: WebView?) {
@@ -77,6 +87,7 @@ class GamePreferences(context: Context) {
     private const val KEY_NOTIFICATIONS_ENABLED = "notifications_enabled"
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
     private const val KEY_IMMERSIVE = "immersive"
+    private const val KEY_AUTO_UPDATE_ENABLED = "auto_update_enabled"
     private const val KEY_GITHUB_REPO = "github_repo"
 
     const val MIN_FPS = 20

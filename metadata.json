@@ -1,6 +1,6 @@
 {
   "name": "Cosmic Battle",
-  "description": "Cosmic Battle v1.0.3 Android game with new abilities and enemies, active graphics engine detection, maximum CPU/GPU optimization, and GitHub in-app auto-updater with download progress bar.",
+  "description": "Cosmic Battle v1.0.4 Android game with new abilities and enemies, active graphics engine detection, maximum CPU/GPU optimization, and in-app auto-updater with background downloads and progress bar.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -155,10 +155,11 @@ fun CosmicBattleScreen(
   var isKeepScreenOn by remember { mutableStateOf(gamePreferences.isKeepScreenOn) }
   var isImmersive by remember { mutableStateOf(gamePreferences.isImmersive) }
   var isNotificationsEnabled by remember { mutableStateOf(gamePreferences.isNotificationsEnabled) }
+  var isAutoUpdateEnabled by remember { mutableStateOf(gamePreferences.isAutoUpdateEnabled) }
 
   val coroutineScope = rememberCoroutineScope()
 
-  // GitHub In-App Update States
+  // In-App Update States
   var isCheckingUpdate by remember { mutableStateOf(false) }
   var updateCheckStatus by remember { mutableStateOf<String?>(null) }
   var availableUpdate by remember { mutableStateOf<AppUpdateManager.UpdateInfo?>(null) }
@@ -169,44 +170,19 @@ fun CosmicBattleScreen(
   var downloadStatusText by remember { mutableStateOf("Загрузка обновления...") }
   var downloadError by remember { mutableStateOf<String?>(null) }
 
-  fun performCheckForUpdates(showFeedbackIfNoUpdate: Boolean = false) {
-    if (isCheckingUpdate) return
-    isCheckingUpdate = true
-    updateCheckStatus = "Подключение к GitHub..."
-    coroutineScope.launch {
-      val result = AppUpdateManager.checkForUpdates("1.0.3", gamePreferences.githubRepo)
-      isCheckingUpdate = false
-      when (result) {
-        is AppUpdateManager.UpdateCheckResult.Success -> {
-          availableUpdate = result.updateInfo
-          updateCheckStatus = "🔥 Найдена новая версия: ${result.updateInfo.latestVersion}"
-          showUpdateNoticeDialog = true
-        }
-        is AppUpdateManager.UpdateCheckResult.NoUpdate -> {
-          availableUpdate = null
-          updateCheckStatus = "У вас установлена последняя версия (v1.0.3)"
-          if (showFeedbackIfNoUpdate) {
-            Toast.makeText(context, "У вас установлена самая новая версия игры (v1.0.3)", Toast.LENGTH_SHORT).show()
-          }
-        }
-        is AppUpdateManager.UpdateCheckResult.Error -> {
-          updateCheckStatus = result.message
-          if (showFeedbackIfNoUpdate) {
-            Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
-          }
-        }
-      }
+  fun startUpdateDownload(downloadUrl: String, inBackground: Boolean = false) {
+    if (!inBackground) {
+      isDownloadingUpdate = true
     }
-  }
-
-  fun startUpdateDownload(downloadUrl: String) {
-    isDownloadingUpdate = true
     downloadProgressPercent = 0
     downloadProgressBytes = 0L to 0L
     downloadStatusText = "Подключение к серверу загрузки..."
     downloadError = null
 
     coroutineScope.launch {
+      val versionStr = availableUpdate?.latestVersion ?: AndroidBridge.CURRENT_VERSION
+      NotificationHelper.sendUpdateProgressNotification(context, versionStr, 0)
+
       AppUpdateManager.downloadApk(
         context = context,
         downloadUrl = downloadUrl,
@@ -215,16 +191,18 @@ fun CosmicBattleScreen(
             is AppUpdateManager.DownloadProgress.Progress -> {
               downloadProgressPercent = progress.percent
               downloadProgressBytes = progress.downloadedBytes to progress.totalBytes
-              downloadStatusText = "Скачивание файла обновления..."
+              downloadStatusText = "Скачивание файла обновления (${progress.percent}%)..."
+              NotificationHelper.sendUpdateProgressNotification(context, versionStr, progress.percent)
             }
             is AppUpdateManager.DownloadProgress.Completed -> {
               downloadProgressPercent = 100
-              downloadStatusText = "Загрузка завершена! Запуск установщика..."
+              downloadStatusText = "Загрузка завершена (100%)! Запуск установщика..."
+              NotificationHelper.sendUpdateReadyNotification(context, versionStr, progress.apkFile)
               coroutineScope.launch {
                 delay(400)
                 val success = AppUpdateManager.installApk(context, progress.apkFile)
                 if (!success) {
-                  downloadError = "Не удалось открыть установщик. Разрешите установку неизвестных приложений в системе."
+                  downloadError = "Не удалось открыть установщик. Разрешите установку приложений в настройках."
                 }
               }
             }
@@ -238,28 +216,37 @@ fun CosmicBattleScreen(
     }
   }
 
-  fun startDemoUpdateDownload() {
-    isDownloadingUpdate = true
-    downloadProgressPercent = 0
-    val total = 18L * 1024 * 1024
-    downloadProgressBytes = 0L to total
-    downloadStatusText = "Инициализация тестовой загрузки..."
-    downloadError = null
-
+  fun performCheckForUpdates(showFeedbackIfNoUpdate: Boolean = false) {
+    if (isCheckingUpdate) return
+    isCheckingUpdate = true
+    updateCheckStatus = "Поиск обновлений..."
     coroutineScope.launch {
-      for (p in 1..100) {
-        delay(25)
-        downloadProgressPercent = p
-        downloadProgressBytes = (total * p / 100) to total
-        downloadStatusText = "Скачивание Cosmic Battle v1.0.3..."
-      }
-      downloadStatusText = "Загрузка завершена (100%)! Запуск установщика..."
-      delay(400)
-      val testApk = AppUpdateManager.createSelfTestApk(context)
-      if (testApk != null) {
-        AppUpdateManager.installApk(context, testApk)
-      } else {
-        Toast.makeText(context, "Тестовый APK подготовлен (100%)", Toast.LENGTH_SHORT).show()
+      val result = AppUpdateManager.checkForUpdates(AndroidBridge.CURRENT_VERSION, gamePreferences.githubRepo)
+      isCheckingUpdate = false
+      when (result) {
+        is AppUpdateManager.UpdateCheckResult.Success -> {
+          availableUpdate = result.updateInfo
+          updateCheckStatus = "🔥 Найдена новая версия: ${result.updateInfo.latestVersion}"
+          if (isAutoUpdateEnabled) {
+            // Auto-update silently in the background
+            startUpdateDownload(result.updateInfo.downloadUrl, inBackground = true)
+          } else {
+            showUpdateNoticeDialog = true
+          }
+        }
+        is AppUpdateManager.UpdateCheckResult.NoUpdate -> {
+          availableUpdate = null
+          updateCheckStatus = "У вас установлена последняя версия (v${AndroidBridge.CURRENT_VERSION})"
+          if (showFeedbackIfNoUpdate) {
+            Toast.makeText(context, "У вас установлена самая новая версия игры (v${AndroidBridge.CURRENT_VERSION})", Toast.LENGTH_SHORT).show()
+          }
+        }
+        is AppUpdateManager.UpdateCheckResult.Error -> {
+          updateCheckStatus = result.message
+          if (showFeedbackIfNoUpdate) {
+            Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+          }
+        }
       }
     }
   }
@@ -709,6 +696,17 @@ fun CosmicBattleScreen(
             }
           }
         },
+        isAutoUpdateEnabled = isAutoUpdateEnabled,
+        onToggleAutoUpdate = {
+          val newVal = !isAutoUpdateEnabled
+          isAutoUpdateEnabled = newVal
+          gamePreferences.isAutoUpdateEnabled = newVal
+          Toast.makeText(
+            context,
+            if (newVal) "Автообновление в фоне включено" else "Автообновление в фоне отключено",
+            Toast.LENGTH_SHORT
+          ).show()
+        },
         availableUpdate = availableUpdate,
         isCheckingUpdate = isCheckingUpdate,
         updateCheckStatus = updateCheckStatus,
@@ -716,10 +714,6 @@ fun CosmicBattleScreen(
         onStartUpdate = { url ->
           showSettingsDialog = false
           startUpdateDownload(url)
-        },
-        onStartDemoUpdate = {
-          showSettingsDialog = false
-          startDemoUpdateDownload()
         },
         onReload = {
           showSettingsDialog = false
@@ -1328,6 +1322,7 @@ private fun CosmicSettingsDialog(
   isImmersive: Boolean,
   isKeepScreenOn: Boolean,
   isNotificationsEnabled: Boolean,
+  isAutoUpdateEnabled: Boolean,
   availableUpdate: AppUpdateManager.UpdateInfo?,
   isCheckingUpdate: Boolean,
   updateCheckStatus: String?,
@@ -1335,10 +1330,10 @@ private fun CosmicSettingsDialog(
   onToggleImmersive: () -> Unit,
   onToggleKeepScreenOn: () -> Unit,
   onToggleNotifications: () -> Unit,
+  onToggleAutoUpdate: () -> Unit,
   onSendTestNotification: () -> Unit,
   onCheckUpdates: () -> Unit,
   onStartUpdate: (String) -> Unit,
-  onStartDemoUpdate: () -> Unit,
   onReload: () -> Unit,
   onClearData: () -> Unit,
   onDismiss: () -> Unit
@@ -1365,7 +1360,7 @@ private fun CosmicSettingsDialog(
             fontSize = 17.sp
           )
           Text(
-            text = "Версия 1.0.3",
+            text = "Версия ${AndroidBridge.CURRENT_VERSION}",
             color = StarSilver,
             fontSize = 11.sp,
             fontWeight = FontWeight.Normal
@@ -1652,7 +1647,7 @@ private fun CosmicSettingsDialog(
 
         HorizontalDivider(color = CosmicSurfaceVariant)
 
-        // --- Section: GitHub In-App Updates ---
+        // --- Section: Game Updates ---
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
           Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -1668,7 +1663,7 @@ private fun CosmicSettingsDialog(
               )
               Spacer(modifier = Modifier.width(6.dp))
               Text(
-                text = "Обновление игры (GitHub)",
+                text = "Обновление игры",
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 14.sp,
                 color = StarWhite
@@ -1680,7 +1675,7 @@ private fun CosmicSettingsDialog(
               border = androidx.compose.foundation.BorderStroke(1.dp, GlowGreen.copy(alpha = 0.4f))
             ) {
               Text(
-                text = "v1.0.3",
+                text = "v${AndroidBridge.CURRENT_VERSION}",
                 color = GlowGreen,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
@@ -1690,10 +1685,46 @@ private fun CosmicSettingsDialog(
           }
 
           Text(
-            text = "Проверка новых версий и авто-установка прямо из репозитория GitHub",
+            text = "Проверка обновлений и автоматическая загрузка новой версии игры",
             fontSize = 11.sp,
             color = StarSilver
           )
+
+          // Background auto-update switch
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .clip(RoundedCornerShape(10.dp))
+              .background(CosmicSurfaceVariant.copy(alpha = 0.5f))
+              .clickable { onToggleAutoUpdate() }
+              .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Column(modifier = Modifier.weight(1f)) {
+              Text(
+                text = "Автообновление в фоне",
+                fontSize = 13.sp,
+                color = StarWhite,
+                fontWeight = FontWeight.Medium
+              )
+              Text(
+                text = "Автоматически скачивать новую версию при обнаружении",
+                fontSize = 10.sp,
+                color = StarSilver
+              )
+            }
+            Switch(
+              checked = isAutoUpdateEnabled,
+              onCheckedChange = { onToggleAutoUpdate() },
+              colors = SwitchDefaults.colors(
+                checkedThumbColor = StarWhite,
+                checkedTrackColor = GlowGreen,
+                uncheckedThumbColor = StarSilver,
+                uncheckedTrackColor = CosmicDark
+              )
+            )
+          }
 
           if (availableUpdate != null) {
             Card(
@@ -1746,49 +1777,30 @@ private fun CosmicSettingsDialog(
             )
           }
 
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+          Button(
+            onClick = onCheckUpdates,
+            enabled = !isCheckingUpdate,
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("check_updates_button"),
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.buttonColors(
+              containerColor = NeonCyan.copy(alpha = 0.2f),
+              contentColor = NeonCyan
+            )
           ) {
-            Button(
-              onClick = onCheckUpdates,
-              enabled = !isCheckingUpdate,
-              modifier = Modifier
-                .weight(1f)
-                .testTag("check_updates_button"),
-              shape = RoundedCornerShape(10.dp),
-              colors = ButtonDefaults.buttonColors(
-                containerColor = NeonCyan.copy(alpha = 0.2f),
-                contentColor = NeonCyan
+            if (isCheckingUpdate) {
+              CircularProgressIndicator(
+                modifier = Modifier.size(14.dp),
+                color = NeonCyan,
+                strokeWidth = 2.dp
               )
-            ) {
-              if (isCheckingUpdate) {
-                CircularProgressIndicator(
-                  modifier = Modifier.size(14.dp),
-                  color = NeonCyan,
-                  strokeWidth = 2.dp
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Проверка...", fontSize = 12.sp)
-              } else {
-                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Проверить", fontSize = 12.sp)
-              }
-            }
-
-            OutlinedButton(
-              onClick = onStartDemoUpdate,
-              modifier = Modifier
-                .weight(1f)
-                .testTag("test_update_button"),
-              shape = RoundedCornerShape(10.dp),
-              colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonPurple),
-              border = androidx.compose.foundation.BorderStroke(1.dp, NeonPurple.copy(alpha = 0.5f))
-            ) {
-              Icon(Icons.Default.RocketLaunch, contentDescription = null, modifier = Modifier.size(14.dp))
+              Spacer(modifier = Modifier.width(6.dp))
+              Text("Проверка...", fontSize = 12.sp)
+            } else {
+              Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
               Spacer(modifier = Modifier.width(4.dp))
-              Text("Тест загрузки", fontSize = 12.sp)
+              Text("Проверить наличие обновлений", fontSize = 12.sp)
             }
           }
         }
