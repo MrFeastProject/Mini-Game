@@ -52,8 +52,19 @@ class ExampleRobolectricTest {
     org.junit.Assert.assertNotNull(engineInfo.bestEngineName)
     org.junit.Assert.assertTrue(engineInfo.isHardwareAccelerated)
     val bridge = com.example.game.AndroidBridge(context)
-    assertEquals("1.0.2", bridge.getAppVersion())
-    org.junit.Assert.assertTrue(bridge.getGraphicsEngineInfoJson().contains("1.0.2"))
+    assertEquals("1.0.3", bridge.getAppVersion())
+    org.junit.Assert.assertTrue(bridge.getGraphicsEngineInfoJson().contains("1.0.3"))
+  }
+
+  @Test
+  fun `verify app update version comparison`() {
+    val manager = com.example.game.AppUpdateManager
+    org.junit.Assert.assertTrue(manager.isNewerVersion("1.0.4", "1.0.3"))
+    org.junit.Assert.assertTrue(manager.isNewerVersion("v1.1.0", "1.0.3"))
+    org.junit.Assert.assertTrue(manager.isNewerVersion("2.0.0", "1.0.3"))
+    org.junit.Assert.assertFalse(manager.isNewerVersion("1.0.3", "1.0.3"))
+    org.junit.Assert.assertFalse(manager.isNewerVersion("v1.0.3", "1.0.3"))
+    org.junit.Assert.assertFalse(manager.isNewerVersion("1.0.2", "1.0.3"))
   }
 
   @Test

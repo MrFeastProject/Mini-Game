@@ -28,6 +28,10 @@ class GamePreferences(context: Context) {
     get() = prefs.getBoolean(KEY_IMMERSIVE, true)
     set(value) = prefs.edit().putBoolean(KEY_IMMERSIVE, value).apply()
 
+  var githubRepo: String
+    get() = prefs.getString(KEY_GITHUB_REPO, AppUpdateManager.DEFAULT_REPO) ?: AppUpdateManager.DEFAULT_REPO
+    set(value) = prefs.edit().putString(KEY_GITHUB_REPO, value.trim()).apply()
+
   fun applyFpsSettings(activity: Activity?, webView: WebView?) {
     val targetFps = fpsLimit.coerceAtLeast(MIN_FPS)
 
@@ -73,6 +77,7 @@ class GamePreferences(context: Context) {
     private const val KEY_NOTIFICATIONS_ENABLED = "notifications_enabled"
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
     private const val KEY_IMMERSIVE = "immersive"
+    private const val KEY_GITHUB_REPO = "github_repo"
 
     const val MIN_FPS = 20
     const val DEFAULT_FPS = 60

@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -92,7 +93,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -152,6 +155,120 @@ fun CosmicBattleScreen(
   var isKeepScreenOn by remember { mutableStateOf(gamePreferences.isKeepScreenOn) }
   var isImmersive by remember { mutableStateOf(gamePreferences.isImmersive) }
   var isNotificationsEnabled by remember { mutableStateOf(gamePreferences.isNotificationsEnabled) }
+
+  val coroutineScope = rememberCoroutineScope()
+
+  // GitHub In-App Update States
+  var isCheckingUpdate by remember { mutableStateOf(false) }
+  var updateCheckStatus by remember { mutableStateOf<String?>(null) }
+  var availableUpdate by remember { mutableStateOf<AppUpdateManager.UpdateInfo?>(null) }
+  var showUpdateNoticeDialog by remember { mutableStateOf(false) }
+  var isDownloadingUpdate by remember { mutableStateOf(false) }
+  var downloadProgressPercent by remember { mutableIntStateOf(0) }
+  var downloadProgressBytes by remember { mutableStateOf(0L to 0L) }
+  var downloadStatusText by remember { mutableStateOf("Загрузка обновления...") }
+  var downloadError by remember { mutableStateOf<String?>(null) }
+
+  fun performCheckForUpdates(showFeedbackIfNoUpdate: Boolean = false) {
+    if (isCheckingUpdate) return
+    isCheckingUpdate = true
+    updateCheckStatus = "Подключение к GitHub..."
+    coroutineScope.launch {
+      val result = AppUpdateManager.checkForUpdates("1.0.3", gamePreferences.githubRepo)
+      isCheckingUpdate = false
+      when (result) {
+        is AppUpdateManager.UpdateCheckResult.Success -> {
+          availableUpdate = result.updateInfo
+          updateCheckStatus = "🔥 Найдена новая версия: ${result.updateInfo.latestVersion}"
+          showUpdateNoticeDialog = true
+        }
+        is AppUpdateManager.UpdateCheckResult.NoUpdate -> {
+          availableUpdate = null
+          updateCheckStatus = "У вас установлена последняя версия (v1.0.3)"
+          if (showFeedbackIfNoUpdate) {
+            Toast.makeText(context, "У вас установлена самая новая версия игры (v1.0.3)", Toast.LENGTH_SHORT).show()
+          }
+        }
+        is AppUpdateManager.UpdateCheckResult.Error -> {
+          updateCheckStatus = result.message
+          if (showFeedbackIfNoUpdate) {
+            Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+          }
+        }
+      }
+    }
+  }
+
+  fun startUpdateDownload(downloadUrl: String) {
+    isDownloadingUpdate = true
+    downloadProgressPercent = 0
+    downloadProgressBytes = 0L to 0L
+    downloadStatusText = "Подключение к серверу загрузки..."
+    downloadError = null
+
+    coroutineScope.launch {
+      AppUpdateManager.downloadApk(
+        context = context,
+        downloadUrl = downloadUrl,
+        onProgress = { progress ->
+          when (progress) {
+            is AppUpdateManager.DownloadProgress.Progress -> {
+              downloadProgressPercent = progress.percent
+              downloadProgressBytes = progress.downloadedBytes to progress.totalBytes
+              downloadStatusText = "Скачивание файла обновления..."
+            }
+            is AppUpdateManager.DownloadProgress.Completed -> {
+              downloadProgressPercent = 100
+              downloadStatusText = "Загрузка завершена! Запуск установщика..."
+              coroutineScope.launch {
+                delay(400)
+                val success = AppUpdateManager.installApk(context, progress.apkFile)
+                if (!success) {
+                  downloadError = "Не удалось открыть установщик. Разрешите установку неизвестных приложений в системе."
+                }
+              }
+            }
+            is AppUpdateManager.DownloadProgress.Failed -> {
+              downloadError = progress.error
+              downloadStatusText = "Ошибка: ${progress.error}"
+            }
+          }
+        }
+      )
+    }
+  }
+
+  fun startDemoUpdateDownload() {
+    isDownloadingUpdate = true
+    downloadProgressPercent = 0
+    val total = 18L * 1024 * 1024
+    downloadProgressBytes = 0L to total
+    downloadStatusText = "Инициализация тестовой загрузки..."
+    downloadError = null
+
+    coroutineScope.launch {
+      for (p in 1..100) {
+        delay(25)
+        downloadProgressPercent = p
+        downloadProgressBytes = (total * p / 100) to total
+        downloadStatusText = "Скачивание Cosmic Battle v1.0.3..."
+      }
+      downloadStatusText = "Загрузка завершена (100%)! Запуск установщика..."
+      delay(400)
+      val testApk = AppUpdateManager.createSelfTestApk(context)
+      if (testApk != null) {
+        AppUpdateManager.installApk(context, testApk)
+      } else {
+        Toast.makeText(context, "Тестовый APK подготовлен (100%)", Toast.LENGTH_SHORT).show()
+      }
+    }
+  }
+
+  // Automatic silent update check on startup (runs after 2.5s)
+  LaunchedEffect(Unit) {
+    delay(2500)
+    performCheckForUpdates(showFeedbackIfNoUpdate = false)
+  }
 
   // Custom Fullscreen View support (WebChromeClient)
   var customView by remember { mutableStateOf<View?>(null) }
@@ -306,7 +423,15 @@ fun CosmicBattleScreen(
             cookieManager.setAcceptThirdPartyCookies(this, true)
 
             // Native Android Bridge for haptic vibrations and device capabilities
-            addJavascriptInterface(AndroidBridge(ctx), "AndroidBridge")
+            val bridge = AndroidBridge(ctx).apply {
+              setOnCheckUpdatesListener {
+                (ctx as? Activity)?.runOnUiThread {
+                  showSettingsDialog = true
+                  performCheckForUpdates(showFeedbackIfNoUpdate = true)
+                }
+              }
+            }
+            addJavascriptInterface(bridge, "AndroidBridge")
 
             // WebSettings configuration tuned for ALL devices & Android versions (Android 7 - 16)
             settings.apply {
@@ -584,6 +709,18 @@ fun CosmicBattleScreen(
             }
           }
         },
+        availableUpdate = availableUpdate,
+        isCheckingUpdate = isCheckingUpdate,
+        updateCheckStatus = updateCheckStatus,
+        onCheckUpdates = { performCheckForUpdates(showFeedbackIfNoUpdate = true) },
+        onStartUpdate = { url ->
+          showSettingsDialog = false
+          startUpdateDownload(url)
+        },
+        onStartDemoUpdate = {
+          showSettingsDialog = false
+          startDemoUpdateDownload()
+        },
         onReload = {
           showSettingsDialog = false
           hasError = false
@@ -595,6 +732,195 @@ fun CosmicBattleScreen(
           showClearDataDialog = true
         },
         onDismiss = { showSettingsDialog = false }
+      )
+    }
+
+    // In-App Update Notice Dialog (Prompts user when new version found)
+    if (showUpdateNoticeDialog && availableUpdate != null) {
+      val update = availableUpdate!!
+      AlertDialog(
+        onDismissRequest = { showUpdateNoticeDialog = false },
+        containerColor = CosmicSurface,
+        shape = RoundedCornerShape(18.dp),
+        title = {
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+              imageVector = Icons.Default.RocketLaunch,
+              contentDescription = null,
+              tint = GlowGreen,
+              modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+              text = "Доступно обновление!",
+              color = StarWhite,
+              fontWeight = FontWeight.Bold,
+              fontSize = 17.sp
+            )
+          }
+        },
+        text = {
+          Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(
+              text = "Вышла новая версия ${update.latestVersion} игры Cosmic Battle (текущая: ${update.currentVersion}).",
+              color = StarSilver,
+              fontSize = 13.sp
+            )
+            if (update.changelog.isNotBlank()) {
+              Card(
+                shape = RoundedCornerShape(8.dp),
+                colors = CardDefaults.cardColors(containerColor = CosmicDark.copy(alpha = 0.8f)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, CosmicSurfaceVariant),
+                modifier = Modifier.fillMaxWidth()
+              ) {
+                Text(
+                  text = update.changelog,
+                  color = StarWhite,
+                  fontSize = 12.sp,
+                  modifier = Modifier.padding(10.dp)
+                )
+              }
+            }
+          }
+        },
+        confirmButton = {
+          Button(
+            onClick = {
+              showUpdateNoticeDialog = false
+              startUpdateDownload(update.downloadUrl)
+            },
+            colors = ButtonDefaults.buttonColors(
+              containerColor = GlowGreen,
+              contentColor = CosmicDark
+            ),
+            modifier = Modifier.testTag("notice_update_button")
+          ) {
+            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("Обновить", fontWeight = FontWeight.Bold)
+          }
+        },
+        dismissButton = {
+          TextButton(
+            onClick = { showUpdateNoticeDialog = false },
+            modifier = Modifier.testTag("notice_later_button")
+          ) {
+            Text("Позже", color = StarSilver)
+          }
+        }
+      )
+    }
+
+    // In-App Download Progress Bar & Auto-Install Dialog
+    if (isDownloadingUpdate) {
+      AlertDialog(
+        onDismissRequest = {
+          if (downloadError != null || downloadProgressPercent == 100) {
+            isDownloadingUpdate = false
+          }
+        },
+        containerColor = CosmicSurface,
+        shape = RoundedCornerShape(18.dp),
+        title = {
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+              imageVector = Icons.Default.Download,
+              contentDescription = null,
+              tint = NeonCyan,
+              modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+              text = "Обновление Cosmic Battle",
+              color = StarWhite,
+              fontWeight = FontWeight.Bold,
+              fontSize = 17.sp
+            )
+          }
+        },
+        text = {
+          Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+          ) {
+            Text(
+              text = downloadStatusText,
+              color = if (downloadError != null) AlertRed else StarSilver,
+              fontSize = 13.sp
+            )
+
+            // Dynamic Gradient Progress Bar with percentage fill
+            Box(
+              modifier = Modifier
+                .fillMaxWidth()
+                .height(14.dp)
+                .clip(RoundedCornerShape(7.dp))
+                .background(CosmicDark)
+                .border(1.dp, NeonCyan.copy(alpha = 0.3f), RoundedCornerShape(7.dp))
+            ) {
+              Box(
+                modifier = Modifier
+                  .fillMaxWidth(fraction = (downloadProgressPercent / 100f).coerceIn(0f, 1f))
+                  .fillMaxHeight()
+                  .background(
+                    Brush.horizontalGradient(
+                      listOf(NeonCyan, GlowGreen)
+                    )
+                  )
+              )
+            }
+
+            // Percentage & Size indicator
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Text(
+                text = "$downloadProgressPercent%",
+                color = GlowGreen,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp
+              )
+              Text(
+                text = if (downloadProgressBytes.second > 0) {
+                  "${AppUpdateManager.formatBytes(downloadProgressBytes.first)} / ${AppUpdateManager.formatBytes(downloadProgressBytes.second)}"
+                } else if (downloadProgressBytes.first > 0) {
+                  AppUpdateManager.formatBytes(downloadProgressBytes.first)
+                } else {
+                  "Загрузка..."
+                },
+                color = StarSilver,
+                fontSize = 12.sp
+              )
+            }
+
+            if (downloadError != null) {
+              Text(
+                text = downloadError ?: "",
+                color = AlertRed,
+                fontSize = 12.sp
+              )
+            }
+          }
+        },
+        confirmButton = {
+          if (downloadError != null || downloadProgressPercent == 100) {
+            Button(
+              onClick = { isDownloadingUpdate = false },
+              colors = ButtonDefaults.buttonColors(
+                containerColor = CosmicSurfaceVariant,
+                contentColor = NeonCyan
+              )
+            ) {
+              Text("Закрыть")
+            }
+          } else {
+            TextButton(onClick = { isDownloadingUpdate = false }) {
+              Text("Отмена", color = StarSilver)
+            }
+          }
+        }
       )
     }
 
@@ -1002,11 +1328,17 @@ private fun CosmicSettingsDialog(
   isImmersive: Boolean,
   isKeepScreenOn: Boolean,
   isNotificationsEnabled: Boolean,
+  availableUpdate: AppUpdateManager.UpdateInfo?,
+  isCheckingUpdate: Boolean,
+  updateCheckStatus: String?,
   onSelectFps: (Int) -> Unit,
   onToggleImmersive: () -> Unit,
   onToggleKeepScreenOn: () -> Unit,
   onToggleNotifications: () -> Unit,
   onSendTestNotification: () -> Unit,
+  onCheckUpdates: () -> Unit,
+  onStartUpdate: (String) -> Unit,
+  onStartDemoUpdate: () -> Unit,
   onReload: () -> Unit,
   onClearData: () -> Unit,
   onDismiss: () -> Unit
@@ -1033,7 +1365,7 @@ private fun CosmicSettingsDialog(
             fontSize = 17.sp
           )
           Text(
-            text = "Версия 1.0.2",
+            text = "Версия 1.0.3",
             color = StarSilver,
             fontSize = 11.sp,
             fontWeight = FontWeight.Normal
@@ -1183,7 +1515,7 @@ private fun CosmicSettingsDialog(
           }
           Spacer(modifier = Modifier.height(4.dp))
           Text(
-            text = "Синхронизирует экран устройства и игровой цикл Canvas",
+            text = "Ограничьте максимальный порог FPS в игре-Больше=плавнее,меньше-прерывисто",
             fontSize = 11.sp,
             color = StarSilver
           )
@@ -1315,6 +1647,149 @@ private fun CosmicSettingsDialog(
                 checkedTrackColor = CosmicSurfaceVariant
               )
             )
+          }
+        }
+
+        HorizontalDivider(color = CosmicSurfaceVariant)
+
+        // --- Section: GitHub In-App Updates ---
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Icon(
+                imageVector = Icons.Default.RocketLaunch,
+                contentDescription = null,
+                tint = GlowGreen,
+                modifier = Modifier.size(18.dp)
+              )
+              Spacer(modifier = Modifier.width(6.dp))
+              Text(
+                text = "Обновление игры (GitHub)",
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                color = StarWhite
+              )
+            }
+            Surface(
+              shape = RoundedCornerShape(8.dp),
+              color = GlowGreen.copy(alpha = 0.15f),
+              border = androidx.compose.foundation.BorderStroke(1.dp, GlowGreen.copy(alpha = 0.4f))
+            ) {
+              Text(
+                text = "v1.0.3",
+                color = GlowGreen,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+              )
+            }
+          }
+
+          Text(
+            text = "Проверка новых версий и авто-установка прямо из репозитория GitHub",
+            fontSize = 11.sp,
+            color = StarSilver
+          )
+
+          if (availableUpdate != null) {
+            Card(
+              shape = RoundedCornerShape(10.dp),
+              colors = CardDefaults.cardColors(containerColor = GlowGreen.copy(alpha = 0.12f)),
+              border = androidx.compose.foundation.BorderStroke(1.dp, GlowGreen.copy(alpha = 0.5f)),
+              modifier = Modifier.fillMaxWidth()
+            ) {
+              Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+              ) {
+                Text(
+                  text = "🔥 Доступна версия ${availableUpdate.latestVersion}!",
+                  fontWeight = FontWeight.Bold,
+                  fontSize = 13.sp,
+                  color = GlowGreen
+                )
+                if (availableUpdate.changelog.isNotBlank()) {
+                  Text(
+                    text = availableUpdate.changelog,
+                    fontSize = 11.sp,
+                    color = StarWhite
+                  )
+                }
+                Button(
+                  onClick = { onStartUpdate(availableUpdate.downloadUrl) },
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("update_now_button"),
+                  shape = RoundedCornerShape(8.dp),
+                  colors = ButtonDefaults.buttonColors(
+                    containerColor = GlowGreen,
+                    contentColor = CosmicDark
+                  )
+                ) {
+                  Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                  Spacer(modifier = Modifier.width(6.dp))
+                  Text("Обновить до ${availableUpdate.latestVersion}", fontWeight = FontWeight.Bold)
+                }
+              }
+            }
+          } else if (updateCheckStatus != null) {
+            Text(
+              text = updateCheckStatus,
+              fontSize = 12.sp,
+              color = if (updateCheckStatus.contains("последняя", ignoreCase = true) ||
+                updateCheckStatus.contains("актуальная", ignoreCase = true)
+              ) GlowGreen else StarSilver
+            )
+          }
+
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+          ) {
+            Button(
+              onClick = onCheckUpdates,
+              enabled = !isCheckingUpdate,
+              modifier = Modifier
+                .weight(1f)
+                .testTag("check_updates_button"),
+              shape = RoundedCornerShape(10.dp),
+              colors = ButtonDefaults.buttonColors(
+                containerColor = NeonCyan.copy(alpha = 0.2f),
+                contentColor = NeonCyan
+              )
+            ) {
+              if (isCheckingUpdate) {
+                CircularProgressIndicator(
+                  modifier = Modifier.size(14.dp),
+                  color = NeonCyan,
+                  strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Проверка...", fontSize = 12.sp)
+              } else {
+                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Проверить", fontSize = 12.sp)
+              }
+            }
+
+            OutlinedButton(
+              onClick = onStartDemoUpdate,
+              modifier = Modifier
+                .weight(1f)
+                .testTag("test_update_button"),
+              shape = RoundedCornerShape(10.dp),
+              colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonPurple),
+              border = androidx.compose.foundation.BorderStroke(1.dp, NeonPurple.copy(alpha = 0.5f))
+            ) {
+              Icon(Icons.Default.RocketLaunch, contentDescription = null, modifier = Modifier.size(14.dp))
+              Spacer(modifier = Modifier.width(4.dp))
+              Text("Тест загрузки", fontSize = 12.sp)
+            }
           }
         }
 

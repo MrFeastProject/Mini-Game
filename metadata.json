@@ -1,6 +1,6 @@
 {
   "name": "Cosmic Battle",
-  "description": "Cosmic Battle v1.0.2 Android game with active graphics engine detection (Vulkan / OpenGL ES 3.2), maximum CPU/GPU/WebView hardware optimization, and background battle reminders.",
+  "description": "Cosmic Battle v1.0.3 Android game with new abilities and enemies, active graphics engine detection, maximum CPU/GPU optimization, and GitHub in-app auto-updater with download progress bar.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

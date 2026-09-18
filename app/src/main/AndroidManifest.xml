@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Graphics Engine & Hardware Acceleration Capabilities -->
     <uses-feature
@@ -105,6 +106,14 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="com.example.game.ACTION_BATTLE_REMINDER" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".game.AppUpdateReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
 

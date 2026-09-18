@@ -21,7 +21,7 @@ class AndroidBridge(private val context: Context) {
   }
 
   @JavascriptInterface
-  fun getAppVersion(): String = "1.0.2"
+  fun getAppVersion(): String = "1.0.3"
 
   @JavascriptInterface
   fun isHardwareAccelerated(): Boolean = true
@@ -41,12 +41,23 @@ class AndroidBridge(private val context: Context) {
         put("isHardwareAccelerated", info.isHardwareAccelerated)
         put("recommendationSummary", info.recommendationSummary)
         put("technicalDetails", info.technicalDetails)
-        put("appVersion", "1.0.2")
+        put("appVersion", "1.0.3")
       }
       json.toString()
     } catch (e: Exception) {
-      "{ \"bestEngine\": \"Hardware GPU Pipeline\", \"appVersion\": \"1.0.2\", \"isHardwareAccelerated\": true }"
+      "{ \"bestEngine\": \"Hardware GPU Pipeline\", \"appVersion\": \"1.0.3\", \"isHardwareAccelerated\": true }"
     }
+  }
+
+  private var onCheckUpdatesRequested: (() -> Unit)? = null
+
+  fun setOnCheckUpdatesListener(listener: () -> Unit) {
+    onCheckUpdatesRequested = listener
+  }
+
+  @JavascriptInterface
+  fun checkUpdates() {
+    onCheckUpdatesRequested?.invoke()
   }
 
   @JavascriptInterface
